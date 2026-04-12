@@ -1,23 +1,3 @@
-/-!
-# Prefix Codes and Canonical Huffman Construction
-
-Formal specification of prefix-free binary codes and the canonical
-Huffman code construction from RFC 1951 §3.2.2.
-
-A prefix code is a set of binary codewords where no codeword is a proper
-prefix of another. This guarantees unique, unambiguous decoding: given a
-bit stream, there is at most one way to segment it into codewords.
-
-The canonical Huffman construction assigns codewords to symbols based
-solely on their code lengths, using a deterministic algorithm that ensures:
-1. Shorter codes are numerically smaller
-2. Codes of the same length are assigned in increasing symbol order
-
-Kraft inequality analysis is in `Zip.Spec.HuffmanKraft`.
-Property theorems (prefix-free proofs, injectivity, decode correctness)
-are in `Zip.Spec.HuffmanTheorems`.
--/
-
 namespace Huffman.Spec
 
 /-! ## Codewords -/
@@ -31,43 +11,6 @@ def natToBits (val : Nat) : Nat → Codeword
   | 0 => []
   | w + 1 => val.testBit w :: natToBits val w
 
-/-! ## Properties of `natToBits` -/
-
-/-- `natToBits` produces a list of the specified width. -/
-theorem natToBits_length (val width : Nat) :
-    (natToBits val width).length = width := by
-  induction width with
-  | zero => simp only [natToBits, List.length_nil]
-  | succ n ih => simp only [natToBits, List.length_cons, ih]
-
-/-- Two `natToBits` outputs of the same width are equal iff all testBit
-    values agree on bit positions below the width. -/
-theorem natToBits_eq_iff (v₁ v₂ w : Nat) :
-    natToBits v₁ w = natToBits v₂ w ↔ ∀ i < w, v₁.testBit i = v₂.testBit i := by
-  induction w with
-  | zero => simp only [natToBits, Nat.not_lt_zero, false_implies, implies_true]
-  | succ n ih =>
-    simp only [natToBits, List.cons.injEq]
-    rw [ih]
-    constructor
-    · rintro ⟨hbit, htail⟩ i hi
-      rcases Nat.lt_succ_iff_lt_or_eq.mp hi with h | h
-      · exact htail i h
-      · exact h ▸ hbit
-    · intro h
-      exact ⟨h n (by omega), fun i hi => h i (by omega)⟩
-
-/-- `natToBits` is injective for values below `2^w`. -/
-theorem natToBits_injective (v₁ v₂ w : Nat) (h₁ : v₁ < 2 ^ w) (h₂ : v₂ < 2 ^ w)
-    (heq : natToBits v₁ w = natToBits v₂ w) : v₁ = v₂ := by
-  apply Nat.eq_of_testBit_eq; intro i
-  by_cases hi : i < w
-  · exact (natToBits_eq_iff v₁ v₂ w).mp heq i hi
-  · have p₁ : v₁ < 2 ^ i := Nat.lt_of_lt_of_le h₁ (Nat.pow_le_pow_right (by omega) (by omega))
-    have p₂ : v₂ < 2 ^ i := Nat.lt_of_lt_of_le h₂ (Nat.pow_le_pow_right (by omega) (by omega))
-    rw [Nat.testBit_lt_two_pow p₁, Nat.testBit_lt_two_pow p₂]
-
-/-! ## Canonical Huffman code construction (RFC 1951 §3.2.2) -/
 
 /-- Count the number of codes of each length, producing an array indexed
     by length. Lengths exceeding `maxBits` are clamped. -/
@@ -91,20 +34,6 @@ where
       go (arr.set! bits code) (bits + 1) code
   termination_by maxBits + 1 - bits
 
-private theorem nextCodes_go_size (blCount : Array Nat) (maxBits : Nat)
-    (arr : Array Nat) (bits code : Nat) (hsize : arr.size = maxBits + 1) :
-    (nextCodes.go blCount maxBits arr bits code).size = maxBits + 1 := by
-  unfold nextCodes.go
-  split
-  · exact hsize
-  · exact nextCodes_go_size blCount maxBits _ _ _
-      (by simp only [Array.set!_eq_setIfInBounds, Array.size_setIfInBounds, hsize])
-  termination_by maxBits + 1 - bits
-
-/-- `nextCodes` returns an array of size `maxBits + 1`. -/
-protected theorem nextCodes_size (blCount : Array Nat) (maxBits : Nat) :
-    (nextCodes blCount maxBits).size = maxBits + 1 :=
-  nextCodes_go_size blCount maxBits _ 1 0 (Array.size_replicate ..)
 
 /-- Compute the canonical codeword for a given symbol.
     Returns `none` if the symbol's code length is 0 or exceeds `maxBits`. -/

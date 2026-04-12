@@ -1,10 +1,3 @@
-/-!
-  LSB-first bit packer for DEFLATE streams.
-
-  DEFLATE (RFC 1951) packs bits LSB-first within each byte.
-  This module provides a stateful writer that accumulates bits
-  into a partial byte, flushing complete bytes to a ByteArray.
--/
 namespace Zip.Native
 
 structure BitWriter where

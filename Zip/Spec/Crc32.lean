@@ -40,15 +40,6 @@ def updateList (crc : UInt32) (data : List UInt8) : UInt32 :=
 def checksum (data : List UInt8) : UInt32 :=
   (updateList 0xFFFFFFFF data) ^^^ 0xFFFFFFFF
 
-/-! ## Specification theorems -/
-
-/-- `updateList` over a concatenation equals sequential application. -/
-theorem updateList_append (crc : UInt32) (xs ys : List UInt8) :
-    updateList crc (xs ++ ys) = updateList (updateList crc xs) ys := by
-  simp only [updateList, List.foldl_append]
-
-/-- Empty input leaves the CRC unchanged. -/
-theorem updateList_nil (crc : UInt32) : updateList crc [] = crc := rfl
 
 /-- The CRC-32 lookup table: precomputed CRC for each byte value 0..255. -/
 def mkTable : Array UInt32 :=

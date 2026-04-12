@@ -111,9 +111,6 @@ where
     | "deflate-lazy" =>
       let _ := Zip.Native.Deflate.deflateLazy data
       pure ()
-    | "deflate-ffi" =>
-      let _ ← RawDeflate.compress data level.toUInt8
-      pure ()
     -- Checksum benchmarks
     | "crc32" =>
       let _ := Crc32.Native.crc32 0 data

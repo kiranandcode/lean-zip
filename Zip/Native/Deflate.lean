@@ -83,37 +83,6 @@ def fixedLitCodes : Array (UInt16 × UInt8) :=
 def fixedDistCodes : Array (UInt16 × UInt8) :=
   canonicalCodes Inflate.fixedDistLengths
 
-/-- `canonicalCodes.go` preserves array size. -/
-private theorem canonicalCodes_go_size (lengths : Array UInt8) (nextCode : Array UInt32)
-    (i : Nat) (result : Array (UInt16 × UInt8)) (hrs : result.size = lengths.size) :
-    (canonicalCodes.go lengths nextCode i result).size = lengths.size := by
-  unfold canonicalCodes.go
-  by_cases hi : i < lengths.size
-  · simp only [hi, ↓reduceDIte]
-    by_cases hlen : lengths[i] > 0
-    · simp only [hlen, ↓reduceIte]
-      exact canonicalCodes_go_size lengths _ (i + 1) _ (by
-        simp only [Array.set!_eq_setIfInBounds, Array.setIfInBounds]
-        split <;> simp [Array.size_set, hrs])
-    · simp only [show ¬(lengths[i] > 0) from hlen, ↓reduceIte]
-      exact canonicalCodes_go_size lengths nextCode (i + 1) result hrs
-  · simp only [show ¬(i < lengths.size) from hi, ↓reduceDIte]; exact hrs
-termination_by lengths.size - i
-
-private theorem canonicalCodes_size' (lengths : Array UInt8) (maxBits : Nat) :
-    (canonicalCodes lengths maxBits).size = lengths.size := by
-  unfold canonicalCodes
-  exact canonicalCodes_go_size lengths _ 0 _ (by simp [Array.size_replicate])
-
-@[simp] protected theorem fixedLitCodes_size : fixedLitCodes.size = 288 := by
-  show (canonicalCodes Inflate.fixedLitLengths).size = 288
-  rw [canonicalCodes_size']
-  simp [Inflate.fixedLitLengths, Array.size_append, Array.size_replicate]
-
-@[simp] protected theorem fixedDistCodes_size : fixedDistCodes.size = 32 := by
-  show (canonicalCodes Inflate.fixedDistLengths).size = 32
-  rw [canonicalCodes_size']
-  simp [Inflate.fixedDistLengths, Array.size_replicate]
 
 /-- Inner loop for `findTableCode`: linear search through base/extra tables.
     Requires `baseTable.size ≤ extraTable.size` for safe indexing. -/
@@ -152,32 +121,6 @@ def findLengthCode (length : Nat) : Option (Nat × Nat × UInt32) :=
     Returns (code 0–29, extra_bits_count, extra_bits_value). -/
 def findDistCode (dist : Nat) : Option (Nat × Nat × UInt32) :=
   findTableCode Inflate.distBase Inflate.distExtra dist
-
-/-- `findTableCode.go` returns an index < baseTable.size when successful. -/
-private theorem findTableCode_go_idx_lt {baseTable : Array UInt16} {extraTable : Array UInt8}
-    {value i : Nat} {hsize : baseTable.size ≤ extraTable.size}
-    {idx extraN : Nat} {extraV : UInt32}
-    (h : findTableCode.go baseTable extraTable value i hsize = some (idx, extraN, extraV)) :
-    idx < baseTable.size := by
-  unfold findTableCode.go at h
-  split at h
-  · split at h
-    · simp only [Option.some.injEq, Prod.mk.injEq] at h; omega
-    · exact findTableCode_go_idx_lt h
-  · split at h
-    · simp only [Option.some.injEq, Prod.mk.injEq] at h; omega
-    · exact nomatch h
-termination_by baseTable.size - i
-
-/-- `findLengthCode` returns idx < 29. -/
-private theorem findLengthCode_idx_lt {len idx extraN : Nat} {extraV : UInt32}
-    (h : findLengthCode len = some (idx, extraN, extraV)) : idx < 29 :=
-  findTableCode_go_idx_lt h
-
-/-- `findDistCode` returns dIdx < 30. -/
-private theorem findDistCode_idx_lt {dist dIdx dExtraN : Nat} {dExtraV : UInt32}
-    (h : findDistCode dist = some (dIdx, dExtraN, dExtraV)) : dIdx < 30 :=
-  findTableCode_go_idx_lt h
 
 inductive LZ77Token where
   | literal : UInt8 → LZ77Token

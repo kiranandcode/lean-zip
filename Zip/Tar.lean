@@ -1,5 +1,4 @@
 import ZipCommon.Binary
-import Zip.Gzip
 import ZipCommon.Handle
 import Zip.Native.Gzip
 

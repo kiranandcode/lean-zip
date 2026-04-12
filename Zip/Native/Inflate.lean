@@ -171,16 +171,6 @@ def fillEntries (arr : Array UInt8) (idx count bound : Nat) (val : UInt8) :
   else fillEntries (arr.set! idx val) (idx + 1) (count - 1) bound val
 termination_by count
 
-private theorem fillEntries_snd_eq (arr : Array UInt8) (idx count bound : Nat) (val : UInt8)
-    (h : idx + count ≤ bound) :
-    (fillEntries arr idx count bound val).snd = idx + count := by
-  induction count generalizing arr idx with
-  | zero => simp [fillEntries]
-  | succ n ih =>
-    unfold fillEntries
-    simp only [Nat.succ_ne_zero, false_or, show ¬(idx ≥ bound) from by omega,
-               ↓reduceIte, Nat.add_sub_cancel]
-    rw [ih (arr.set! idx val) (idx + 1) (by omega)]; omega
 
 /-- Read code length code lengths: 3 bits each at permuted positions.
     Defined as explicit recursion for proof tractability. -/
