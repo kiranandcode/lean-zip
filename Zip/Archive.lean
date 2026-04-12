@@ -2,6 +2,7 @@ import ZipCommon.Binary
 import ZipCommon.Handle
 import Zip.Native.Inflate
 import Zip.Native.Crc32
+import Zip.Native.DeflateDynamic
 
 /-! ZIP archive construction and extraction: entry metadata, local/central headers,
     ZIP64 support, and streaming archive creation/extraction. -/
@@ -164,7 +165,7 @@ def create (outputPath : System.FilePath)
     for (archiveName, diskPath) in files do
       let fileData ← IO.FS.readBinFile diskPath
       let crc := Crc32.Native.crc32 0 fileData
-      let deflated ← Zip.Native.Deflate.deflateRaw fileData
+      let deflated := Zip.Native.Deflate.deflateRaw fileData
       let useDeflate := deflated.size < fileData.size
       let method : UInt16 := if useDeflate then 8 else 0
       let compData := if useDeflate then deflated else fileData
@@ -384,11 +385,10 @@ private def listFromHandle (h : IO.FS.Handle) (maxCentralDirSize : Nat := 671088
   parseCentralDir cdBuf 0 cdSize
 
 /-- Read an entry's decompressed data from a file handle by seeking to its local header.
-    `maxEntrySize` limits decompressed entry size (0 = no limit for FFI; the native
-    backend caps at 256 MiB when `maxEntrySize = 0` as a zip-bomb guard).
-    When `useNative` is true, uses the pure Lean DEFLATE decompressor and CRC-32. -/
+    `maxEntrySize` limits decompressed entry size (0 = no limit;
+    native inflate caps at 256 MiB when `maxEntrySize = 0` as a zip-bomb guard). -/
 private def readEntryData (h : IO.FS.Handle) (entry : Entry) (label : String)
-    (maxEntrySize : UInt64 := 0) (useNative : Bool := false) : IO ByteArray := do
+    (maxEntrySize : UInt64 := 0) : IO ByteArray := do
   if maxEntrySize > 0 && entry.uncompressedSize > maxEntrySize then
     throw (IO.userError s!"zip: entry '{label}' uncompressed size ({entry.uncompressedSize}) exceeds limit ({maxEntrySize})")
   Handle.seek h entry.localOffset
@@ -402,17 +402,12 @@ private def readEntryData (h : IO.FS.Handle) (entry : Entry) (label : String)
   let fileData ←
     if entry.method == 0 then pure compData
     else if entry.method == 8 then
-      if useNative then
-        -- maxEntrySize 0 means "no limit" in FFI; native inflate needs an actual bound
-        let nativeMax := if maxEntrySize == 0 then 256 * 1024 * 1024 else maxEntrySize.toNat
-        match Zip.Native.Inflate.inflate compData nativeMax with
-        | .ok data => pure data
-        | .error msg => throw (IO.userError s!"zip: native inflate failed for {label}: {msg}")
-      else RawDeflate.decompress compData maxEntrySize
+      let nativeMax := if maxEntrySize == 0 then 256 * 1024 * 1024 else maxEntrySize.toNat
+      match Zip.Native.Inflate.inflate compData nativeMax with
+      | .ok data => pure data
+      | .error msg => throw (IO.userError s!"zip: native inflate failed for {label}: {msg}")
     else throw (IO.userError s!"zip: unsupported method {entry.method} for {label}")
-  let actualCrc :=
-    if useNative then Crc32.Native.crc32 0 fileData
-    else Checksum.crc32 0 fileData
+  let actualCrc := Crc32.Native.crc32 0 fileData
   unless actualCrc == entry.crc32 do
     throw (IO.userError s!"zip: CRC32 mismatch for {label}: expected {entry.crc32}, got {actualCrc}")
   unless fileData.size.toUInt64 == entry.uncompressedSize do
@@ -425,11 +420,10 @@ def list (inputPath : System.FilePath) (maxCentralDirSize : Nat := 67108864) : I
   IO.FS.withFile inputPath .read (listFromHandle · maxCentralDirSize)
 
 /-- Extract a ZIP archive to an output directory.
-    Memory: O(65KB + central directory + largest single file).
-    When `useNative` is true, uses pure Lean decompression (no C FFI). -/
+    Memory: O(65KB + central directory + largest single file). -/
 def extract (inputPath : System.FilePath) (outDir : System.FilePath)
     (maxCentralDirSize : Nat := 67108864) (maxEntrySize : UInt64 := 0)
-    (useNative : Bool := false) : IO Unit := do
+    (useNative : Bool := true) : IO Unit := do
   IO.FS.withFile inputPath .read fun h => do
     let entries ← listFromHandle h maxCentralDirSize
     for entry in entries do
@@ -445,19 +439,18 @@ def extract (inputPath : System.FilePath) (outDir : System.FilePath)
       let outPath := outDir / entry.path
       if let some parent := outPath.parent then
         IO.FS.createDirAll parent
-      let fileData ← readEntryData h entry entry.path maxEntrySize useNative
+      let fileData ← readEntryData h entry entry.path maxEntrySize
       IO.FS.writeBinFile outPath fileData
 
 /-- Extract a single file from a ZIP archive by name.
-    Memory: O(65KB + central directory + target file).
-    When `useNative` is true, uses pure Lean decompression (no C FFI). -/
+    Memory: O(65KB + central directory + target file). -/
 def extractFile (inputPath : System.FilePath) (filename : String)
     (maxCentralDirSize : Nat := 67108864) (maxEntrySize : UInt64 := 0)
-    (useNative : Bool := false) : IO ByteArray := do
+    (useNative : Bool := true) : IO ByteArray := do
   IO.FS.withFile inputPath .read fun h => do
     let entries ← listFromHandle h maxCentralDirSize
     let some entry := entries.find? (·.path == filename)
       | throw (IO.userError s!"zip: file not found: {filename}")
-    readEntryData h entry filename maxEntrySize useNative
+    readEntryData h entry filename maxEntrySize
 
 end Archive

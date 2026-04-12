@@ -578,65 +578,26 @@ partial def list (input : IO.FS.Stream) : IO (Array Entry) := do
 -- .tar.gz composition
 
 /-- Create a .tar.gz archive from a directory.
-    True streaming — bounded memory regardless of archive size. -/
+    Buffers the tar data in memory and compresses with native gzip. -/
 partial def createTarGz (outputPath : System.FilePath) (dir : System.FilePath)
     (level : UInt8 := 6) : IO Unit := do
-  IO.FS.withFile outputPath .write fun outH => do
-    let outStream := IO.FS.Stream.ofHandle outH
-    let deflate ← Gzip.DeflateState.new level
-    -- Custom stream that compresses writes through gzip
-    let tarStream : IO.FS.Stream := {
-      flush := pure ()
-      read := fun _ => pure ByteArray.empty
-      write := fun chunk => do
-        let compressed ← deflate.push chunk
-        if compressed.size > 0 then outStream.write compressed
-      getLine := pure ""
-      putStr := fun _ => pure ()
-      isTty := pure false
-    }
-    createFromDir tarStream dir
-    let final ← deflate.finish
-    if final.size > 0 then outStream.write final
-    outStream.flush
+  let bufRef ← IO.mkRef ByteArray.empty
+  let tarStream : IO.FS.Stream := {
+    flush := pure ()
+    read := fun _ => pure ByteArray.empty
+    write := fun chunk => bufRef.modify (· ++ chunk)
+    getLine := pure ""
+    putStr := fun _ => pure ()
+    isTty := pure false
+  }
+  createFromDir tarStream dir
+  let tarData ← bufRef.get
+  let gzData := Zip.Native.GzipEncode.compress tarData level
+  IO.FS.writeBinFile outputPath gzData
 
-/-- Extract a .tar.gz archive.
-    True streaming — bounded memory regardless of archive size. -/
-partial def extractTarGz (inputPath : System.FilePath) (outDir : System.FilePath)
-    (maxEntrySize : UInt64 := 0) : IO Unit := do
-  IO.FS.withFile inputPath .read fun inH => do
-    let inStream := IO.FS.Stream.ofHandle inH
-    let inflate ← Gzip.InflateState.new
-    let bufRef ← IO.mkRef ByteArray.empty
-    -- Custom stream that decompresses reads through gzip
-    let tarStream : IO.FS.Stream := {
-      flush := pure ()
-      read := fun n => do
-        let mut buf ← bufRef.get
-        while buf.size < n.toNat do
-          let compressed ← inStream.read 65536
-          if compressed.isEmpty then
-            -- Try to finish inflate for any remaining data
-            let final ← inflate.finish
-            if final.size > 0 then buf := buf ++ final
-            break
-          let decompressed ← inflate.push compressed
-          buf := buf ++ decompressed
-        let toReturn := min buf.size n.toNat
-        let result := buf.extract 0 toReturn
-        bufRef.set (buf.extract toReturn buf.size)
-        return result
-      write := fun _ => pure ()
-      getLine := pure ""
-      putStr := fun _ => pure ()
-      isTty := pure false
-    }
-    extract tarStream outDir maxEntrySize
-
-/-- Extract a .tar.gz archive using pure Lean decompression (no C FFI).
-    Unlike `extractTarGz`, this reads the entire file into memory before
-    decompressing, so memory usage is O(file_size). Use this when C
-    libraries are unavailable. -/
+/-- Extract a .tar.gz archive using pure Lean decompression.
+    Reads the entire file into memory before decompressing,
+    so memory usage is O(file_size). -/
 partial def extractTarGzNative (inputPath : System.FilePath) (outDir : System.FilePath)
     (maxEntrySize : UInt64 := 0) (maxOutputSize : Nat := 256 * 1024 * 1024) : IO Unit := do
   let gzData ← IO.FS.readBinFile inputPath
@@ -661,5 +622,10 @@ partial def extractTarGzNative (inputPath : System.FilePath) (outDir : System.Fi
     isTty := pure false
   }
   extract tarStream outDir maxEntrySize
+
+/-- Extract a .tar.gz archive. Delegates to `extractTarGzNative`. -/
+partial def extractTarGz (inputPath : System.FilePath) (outDir : System.FilePath)
+    (maxEntrySize : UInt64 := 0) : IO Unit :=
+  extractTarGzNative inputPath outDir maxEntrySize
 
 end Tar

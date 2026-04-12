@@ -1,31 +1,24 @@
 import ZipTest.Helpers
+import Zip.Native.Deflate
+import Zip.Native.DeflateDynamic
+import Zip.Native.Inflate
 
-/-! Tests for raw DEFLATE compression/decompression with streaming roundtrip verification. -/
+/-! Tests for native raw DEFLATE compression/decompression with roundtrip verification. -/
 
 def ZipTest.RawDeflate.tests : IO Unit := do
   let big ← mkTestData
 
   -- Whole-buffer roundtrip
-  let rawCompressed ← RawDeflate.compress big
-  let rawDecompressed ← RawDeflate.decompress rawCompressed
+  let rawCompressed := Zip.Native.Deflate.deflateRaw big
+  let rawDecompressed ← match Zip.Native.Inflate.inflate rawCompressed with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! rawDecompressed.beq big
 
-  -- Streaming roundtrip
-  let rawState ← RawDeflate.DeflateState.new
-  let mut rawChunks := ByteArray.empty
-  let mut offset := 0
-  while offset < big.size do
-    let end_ := min (offset + 500) big.size
-    let out ← rawState.push (big.extract offset end_)
-    rawChunks := rawChunks ++ out
-    offset := offset + 500
-  let rawFinal ← rawState.finish
-  rawChunks := rawChunks ++ rawFinal
-  let rawStreamDecomp ← RawDeflate.decompress rawChunks
-  assert! rawStreamDecomp.beq big
-
   -- Empty raw deflate
-  let rawCE ← RawDeflate.compress ByteArray.empty
-  let rawDE ← RawDeflate.decompress rawCE
+  let rawCE := Zip.Native.Deflate.deflateRaw ByteArray.empty
+  let rawDE ← match Zip.Native.Inflate.inflate rawCE with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! rawDE.beq ByteArray.empty
   IO.println "RawDeflate tests: OK"

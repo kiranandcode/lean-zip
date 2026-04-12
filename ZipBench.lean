@@ -6,26 +6,18 @@ Usage:
 
 Operations:
   inflate        — native DEFLATE decompression
-  inflate-ffi    — zlib FFI decompression
   deflate        — native DEFLATE compression (fixed Huffman)
   deflate-lazy   — native DEFLATE compression (lazy matching)
-  deflate-ffi    — zlib FFI compression
   gzip           — native gzip decompression
-  gzip-ffi       — zlib FFI gzip decompression
   zlib           — native zlib decompression
-  zlib-ffi       — zlib FFI zlib decompression
   crc32          — native CRC-32
-  crc32-ffi      — zlib FFI CRC-32
   adler32        — native Adler-32
-  adler32-ffi    — zlib FFI Adler-32
 
 Patterns:   constant, cyclic, prng
 Level:      0-9 (default 6, only for compression/inflate)
 
 Examples:
   hyperfine 'lake exe bench inflate 1048576 prng 6'
-  hyperfine '.lake/build/bin/bench inflate 10485760 prng 6' \
-            '.lake/build/bin/bench inflate-ffi 10485760 prng 6'
   hyperfine --parameter-list size 1024,65536,1048576 \
             '.lake/build/bin/bench inflate {size} prng 6'
 -/
@@ -76,34 +68,22 @@ where
     let some size := sizeStr.toNat? | usage
     let data ← generateData pattern size
     match op with
-    -- Decompression benchmarks (compress with FFI first, then decompress)
+    -- Decompression benchmarks (compress with native first, then decompress)
     | "inflate" =>
-      let compressed ← RawDeflate.compress data level.toUInt8
+      let compressed := Zip.Native.Deflate.deflateRaw data level.toUInt8
       match Zip.Native.Inflate.inflate compressed with
       | .ok _ => pure ()
       | .error e => throw (IO.userError e)
-    | "inflate-ffi" =>
-      let compressed ← RawDeflate.compress data level.toUInt8
-      let _ ← RawDeflate.decompress compressed
-      pure ()
     | "gzip" =>
-      let compressed ← Gzip.compress data level.toUInt8
+      let compressed := Zip.Native.GzipEncode.compress data level.toUInt8
       match Zip.Native.GzipDecode.decompress compressed with
       | .ok _ => pure ()
       | .error e => throw (IO.userError e)
-    | "gzip-ffi" =>
-      let compressed ← Gzip.compress data level.toUInt8
-      let _ ← Gzip.decompress compressed
-      pure ()
     | "zlib" =>
-      let compressed ← Zlib.compress data level.toUInt8
+      let compressed := Zip.Native.ZlibEncode.compress data level.toUInt8
       match Zip.Native.ZlibDecode.decompress compressed with
       | .ok _ => pure ()
       | .error e => throw (IO.userError e)
-    | "zlib-ffi" =>
-      let compressed ← Zlib.compress data level.toUInt8
-      let _ ← Zlib.decompress compressed
-      pure ()
     -- Compression benchmarks
     | "deflate" =>
       let _ := Zip.Native.Deflate.deflateFixed data
@@ -115,13 +95,7 @@ where
     | "crc32" =>
       let _ := Crc32.Native.crc32 0 data
       pure ()
-    | "crc32-ffi" =>
-      let _ := Checksum.crc32 0 data
-      pure ()
     | "adler32" =>
       let _ := Adler32.Native.adler32 1 data
-      pure ()
-    | "adler32-ffi" =>
-      let _ := Checksum.adler32 1 data
       pure ()
     | other => throw (IO.userError s!"unknown operation: {other}")

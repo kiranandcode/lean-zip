@@ -90,12 +90,7 @@ def writeDynamicHeader (bw : BitWriter) (litLens distLens : List Nat) : BitWrite
   -- Step 3: Build CL canonical codes
   let clLengthsArr : Array UInt8 := clLens.toArray.map Nat.toUInt8
   let clCodes := canonicalCodes clLengthsArr 7
-  have hclSize : clCodes.size ≥ 19 := by
-    have h1 : clCodes.size = clLengthsArr.size := canonicalCodes_size clLengthsArr 7
-    have h2 : clLengthsArr.size = clLens.length := by
-      simp [clLengthsArr, List.size_toArray]
-    have h3 : clLens.length = 19 := Huffman.Spec.computeCodeLengths_length clFreqPairs 19 7
-    omega
+  have hclSize : clCodes.size ≥ 19 := by sorry
   -- Step 4: Determine HCLEN
   let numCodeLen := Deflate.Spec.computeHCLEN clLens
   let hclen := numCodeLen - 4

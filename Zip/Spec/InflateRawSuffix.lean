@@ -34,6 +34,4 @@ local macro "bfinal_suffix_dispatch" : tactic =>
             next h₂' => exact absurd h₂' (by assumption)
             next => exact ih _ (by omega) br' out' result endPos Nat.le.refl h))
 
-/-- inflateLoop with appended suffix. -/
-
 end Zip.Native

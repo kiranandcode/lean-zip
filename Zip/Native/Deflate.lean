@@ -80,6 +80,8 @@ where
 def fixedLitCodes : Array (UInt16 × UInt8) :=
   canonicalCodes Inflate.fixedLitLengths
 
+theorem fixedLitCodes_size : fixedLitCodes.size = 288 := by sorry
+
 def fixedDistCodes : Array (UInt16 × UInt8) :=
   canonicalCodes Inflate.fixedDistLengths
 

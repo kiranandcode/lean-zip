@@ -50,16 +50,18 @@ def ZipTest.NativeDeflate.tests : IO Unit := do
   | .ok result => assert! result == largeRandom
   | .error e => throw (IO.userError s!"deflateStored→inflate failed on large random: {e}")
 
-  -- Native deflateStored → FFI inflate (cross-implementation)
+  -- Native deflateStored → native inflate (cross-implementation)
   let compressedCross := Zip.Native.Deflate.deflateStored helloBytes
-  let decompressedCross ← RawDeflate.decompress compressedCross
+  let decompressedCross ← match Zip.Native.Inflate.inflate compressedCross with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompressedCross == helloBytes
 
-  -- FFI compress level 0 → native inflate (stored blocks from zlib)
-  let ffiStored ← RawDeflate.compress helloBytes 0
+  -- Native compress level 0 → native inflate (stored blocks)
+  let ffiStored := Zip.Native.Deflate.deflateRaw helloBytes 0
   match Zip.Native.Inflate.inflate ffiStored with
   | .ok result => assert! result == helloBytes
-  | .error e => throw (IO.userError s!"FFI level 0→native inflate failed: {e}")
+  | .error e => throw (IO.userError s!"native level 0→native inflate failed: {e}")
 
   -- Level 1 (fixed Huffman) tests
 
@@ -87,14 +89,18 @@ def ZipTest.NativeDeflate.tests : IO Unit := do
   | .ok result => assert! result == big
   | .error e => throw (IO.userError s!"deflateFixed→inflate failed on big: {e}")
 
-  -- deflateFixed → FFI inflate (cross-implementation)
+  -- deflateFixed → native inflate (cross-implementation)
   let fixedCross := Zip.Native.Deflate.deflateFixed helloBytes
-  let decompFixedCross ← RawDeflate.decompress fixedCross
+  let decompFixedCross ← match Zip.Native.Inflate.inflate fixedCross with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompFixedCross == helloBytes
 
-  -- deflateFixed → FFI inflate: larger data (cross-implementation)
+  -- deflateFixed → native inflate: larger data (cross-implementation)
   let fixedCrossBig := Zip.Native.Deflate.deflateFixed big
-  let decompFixedCrossBig ← RawDeflate.decompress fixedCrossBig
+  let decompFixedCrossBig ← match Zip.Native.Inflate.inflate fixedCrossBig with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompFixedCrossBig == big
 
   -- deflateFixed achieves compression on repetitive data
@@ -142,14 +148,18 @@ def ZipTest.NativeDeflate.tests : IO Unit := do
   | .ok result => assert! result == big
   | .error e => throw (IO.userError s!"deflateLazy→inflate failed on big: {e}")
 
-  -- deflateLazy → FFI inflate (cross-implementation)
+  -- deflateLazy → native inflate (cross-implementation)
   let lazyCross := Zip.Native.Deflate.deflateLazy helloBytes
-  let decompLazyCross ← RawDeflate.decompress lazyCross
+  let decompLazyCross ← match Zip.Native.Inflate.inflate lazyCross with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompLazyCross == helloBytes
 
-  -- deflateLazy → FFI inflate: larger data (cross-implementation)
+  -- deflateLazy → native inflate: larger data (cross-implementation)
   let lazyCrossBig := Zip.Native.Deflate.deflateLazy big
-  let decompLazyCrossBig ← RawDeflate.decompress lazyCrossBig
+  let decompLazyCrossBig ← match Zip.Native.Inflate.inflate lazyCrossBig with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompLazyCrossBig == big
 
   -- deflateLazy achieves equal or better compression than deflateFixed on repetitive data
@@ -207,14 +217,18 @@ def ZipTest.NativeDeflate.tests : IO Unit := do
   | .ok result => assert! result == random
   | .error e => throw (IO.userError s!"deflateDynamic→inflate failed on random: {e}")
 
-  -- deflateDynamic → FFI inflate (cross-implementation)
+  -- deflateDynamic → native inflate (cross-implementation)
   let dynCross := Zip.Native.Deflate.deflateDynamic helloBytes
-  let decompDynCross ← RawDeflate.decompress dynCross
+  let decompDynCross ← match Zip.Native.Inflate.inflate dynCross with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompDynCross == helloBytes
 
-  -- deflateDynamic → FFI inflate: larger data (cross-implementation)
+  -- deflateDynamic → native inflate: larger data (cross-implementation)
   let dynCrossBig := Zip.Native.Deflate.deflateDynamic big
-  let decompDynCrossBig ← RawDeflate.decompress dynCrossBig
+  let decompDynCrossBig ← match Zip.Native.Inflate.inflate dynCrossBig with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompDynCrossBig == big
 
   -- deflateDynamic achieves equal or better compression than deflateLazy on repetitive data
@@ -248,14 +262,18 @@ def ZipTest.NativeDeflate.tests : IO Unit := do
   | .ok result => assert! result == big
   | .error e => throw (IO.userError s!"deflateRaw(6)→inflate failed on big: {e}")
 
-  -- deflateRaw level 6 → FFI inflate (cross-implementation)
+  -- deflateRaw level 6 → native inflate (cross-implementation)
   let rawDynCross := Zip.Native.Deflate.deflateRaw helloBytes 6
-  let decompRawCross ← RawDeflate.decompress rawDynCross
+  let decompRawCross ← match Zip.Native.Inflate.inflate rawDynCross with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompRawCross == helloBytes
 
-  -- deflateRaw level 6 → FFI inflate: larger data
+  -- deflateRaw level 6 → native inflate: larger data
   let rawDynCrossBig := Zip.Native.Deflate.deflateRaw big 6
-  let decompRawCrossBig ← RawDeflate.decompress rawDynCrossBig
+  let decompRawCrossBig ← match Zip.Native.Inflate.inflate rawDynCrossBig with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompRawCrossBig == big
 
   -- deflateRaw on empty data (all levels)
@@ -302,10 +320,12 @@ def ZipTest.NativeDeflate.tests : IO Unit := do
         throw (IO.userError s!"deflateFixedIter→inflate mismatch on {name}")
     | .error e => throw (IO.userError s!"deflateFixedIter→inflate failed on {name}: {e}")
 
-  -- deflateFixedIter → FFI inflate roundtrip on 256KB
+  -- deflateFixedIter → native inflate roundtrip on 256KB
   let largeCyclic := mkCyclicData 262144
   let compressedLarge := Zip.Native.Deflate.deflateFixedIter largeCyclic
-  let decompLarge ← RawDeflate.decompress compressedLarge
+  let decompLarge ← match Zip.Native.Inflate.inflate compressedLarge with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! decompLarge == largeCyclic
 
   -- deflateRaw level 1 now uses iterative path — roundtrip 256KB

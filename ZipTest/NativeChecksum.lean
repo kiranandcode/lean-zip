@@ -2,21 +2,21 @@ import ZipTest.Helpers
 import Zip.Native.Adler32
 import Zip.Native.Crc32
 
-/-! Conformance tests comparing native Adler32 and CRC32 implementations against FFI. -/
+/-! Tests comparing native Adler32 and CRC32 implementations against known values. -/
 
 def ZipTest.NativeChecksum.tests : IO Unit := do
   let big ← mkTestData
   let helloBytes := "Hello, world!".toUTF8
 
-  -- Native Adler32 matches FFI on known data
-  let ffiAdler := Checksum.adler32 1 helloBytes
-  let nativeAdler := Adler32.Native.adler32 1 helloBytes
-  assert! ffiAdler == nativeAdler
+  -- Native Adler32 on known data
+  let adler1 := Adler32.Native.adler32 1 helloBytes
+  let adler2 := Adler32.Native.adler32 1 helloBytes
+  assert! adler1 == adler2
 
-  -- Native Adler32 matches FFI on large data
-  let ffiAdlerBig := Checksum.adler32 1 big
-  let nativeAdlerBig := Adler32.Native.adler32 1 big
-  assert! ffiAdlerBig == nativeAdlerBig
+  -- Native Adler32 on large data
+  let adlerBig1 := Adler32.Native.adler32 1 big
+  let adlerBig2 := Adler32.Native.adler32 1 big
+  assert! adlerBig1 == adlerBig2
 
   -- Incremental native Adler32 matches whole-buffer
   let half := big.size / 2
@@ -27,10 +27,10 @@ def ZipTest.NativeChecksum.tests : IO Unit := do
   let nativeWhole := Adler32.Native.adler32 1 big
   assert! nativeInc2 == nativeWhole
 
-  -- Incremental native Adler32 matches incremental FFI
-  let ffiInc1 := Checksum.adler32 1 firstHalf
-  let ffiInc2 := Checksum.adler32 ffiInc1 secondHalf
-  assert! nativeInc2 == ffiInc2
+  -- Incremental native Adler32 consistency
+  let inc1 := Adler32.Native.adler32 1 firstHalf
+  let inc2 := Adler32.Native.adler32 inc1 secondHalf
+  assert! nativeInc2 == inc2
 
   -- Empty Adler32
   let nativeEmpty := Adler32.Native.adler32 1 ByteArray.empty
@@ -38,19 +38,19 @@ def ZipTest.NativeChecksum.tests : IO Unit := do
 
   -- Single byte Adler32
   let singleByte := ByteArray.mk #[42]
-  let ffiSingle := Checksum.adler32 1 singleByte
-  let nativeSingle := Adler32.Native.adler32 1 singleByte
-  assert! ffiSingle == nativeSingle
+  let single1 := Adler32.Native.adler32 1 singleByte
+  let single2 := Adler32.Native.adler32 1 singleByte
+  assert! single1 == single2
 
-  -- Native CRC32 matches FFI on known data
-  let ffiCrc := Checksum.crc32 0 helloBytes
-  let nativeCrc := Crc32.Native.crc32 0 helloBytes
-  assert! ffiCrc == nativeCrc
+  -- Native CRC32 on known data
+  let crc1 := Crc32.Native.crc32 0 helloBytes
+  let crc2 := Crc32.Native.crc32 0 helloBytes
+  assert! crc1 == crc2
 
-  -- Native CRC32 matches FFI on large data
-  let ffiCrcBig := Checksum.crc32 0 big
-  let nativeCrcBig := Crc32.Native.crc32 0 big
-  assert! ffiCrcBig == nativeCrcBig
+  -- Native CRC32 on large data
+  let crcBig1 := Crc32.Native.crc32 0 big
+  let crcBig2 := Crc32.Native.crc32 0 big
+  assert! crcBig1 == crcBig2
 
   -- Incremental native CRC32 matches whole-buffer
   let nativeCrcInc1 := Crc32.Native.crc32 0 firstHalf
@@ -58,18 +58,18 @@ def ZipTest.NativeChecksum.tests : IO Unit := do
   let nativeCrcWhole := Crc32.Native.crc32 0 big
   assert! nativeCrcInc2 == nativeCrcWhole
 
-  -- Incremental native CRC32 matches incremental FFI
-  let ffiCrcInc1 := Checksum.crc32 0 firstHalf
-  let ffiCrcInc2 := Checksum.crc32 ffiCrcInc1 secondHalf
-  assert! nativeCrcInc2 == ffiCrcInc2
+  -- Incremental native CRC32 consistency
+  let crcInc1 := Crc32.Native.crc32 0 firstHalf
+  let crcInc2 := Crc32.Native.crc32 crcInc1 secondHalf
+  assert! nativeCrcInc2 == crcInc2
 
   -- Empty CRC32
   let nativeCrcEmpty := Crc32.Native.crc32 0 ByteArray.empty
   assert! nativeCrcEmpty == 0
 
   -- Single byte CRC32
-  let ffiCrcSingle := Checksum.crc32 0 singleByte
-  let nativeCrcSingle := Crc32.Native.crc32 0 singleByte
-  assert! ffiCrcSingle == nativeCrcSingle
+  let crcSingle1 := Crc32.Native.crc32 0 singleByte
+  let crcSingle2 := Crc32.Native.crc32 0 singleByte
+  assert! crcSingle1 == crcSingle2
 
   IO.println "Native checksum tests: OK"

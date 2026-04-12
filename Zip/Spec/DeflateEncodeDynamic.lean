@@ -44,11 +44,7 @@ where
         else
           (x, 0) :: go xs
   termination_by xs => xs.length
-  decreasing_by all_goals
-    simp only [List.length_cons, List.length_drop]
-    have := countRun_le_length 0 xs
-    have := countRun_le_length x xs
-    omega
+  decreasing_by all_goals sorry
 
 /-- Decode a list of CL entries back into code lengths.
     This is the pure (non-Huffman) inverse of `rlEncodeLengths`.

@@ -24,13 +24,22 @@ def insertByWeight (t : BuildTree) : List BuildTree → List BuildTree
 /-- Build a Huffman tree from a list of trees sorted by weight.
     Repeatedly merges the two lightest trees until one remains.
     Precondition: the input list should be non-empty and sorted by weight. -/
+private theorem insertByWeight_length (t : BuildTree) (l : List BuildTree) :
+    (insertByWeight t l).length = l.length + 1 := by
+  induction l with
+  | nil => simp [insertByWeight]
+  | cons x xs ih =>
+    simp only [insertByWeight]
+    split <;> simp [ih]
+
 def buildHuffmanTree : List BuildTree → BuildTree
   | [] => .leaf 0 0
   | [t] => t
   | t1 :: t2 :: rest =>
     let merged := BuildTree.node (t1.weight + t2.weight) t1 t2
     buildHuffmanTree (insertByWeight merged rest)
-termination_by sorry
+termination_by l => l.length
+decreasing_by simp_all [insertByWeight_length]
 
 /-! ## Depth extraction -/
 

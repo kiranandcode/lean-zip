@@ -17,3 +17,6 @@ lean_exe test where
 
 lean_exe bench where
   root := `ZipBench
+
+lean_exe «lean-zip» where
+  root := `ZipCli

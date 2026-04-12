@@ -1,5 +1,6 @@
 import ZipTest.Helpers
 import Zip.Native.Gzip
+import Zip.Native.DeflateDynamic
 import Zip.Spec.GzipCorrect
 import Zip.Spec.ZlibCorrect
 
@@ -11,80 +12,80 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   let big ← mkTestData
   let helloBytes := "Hello, world!".toUTF8
 
-  -- Gzip: FFI compress → native decompress
-  let gzipped ← Gzip.compress helloBytes
+  -- Gzip: native compress → native decompress
+  let gzipped := Zip.Native.GzipEncode.compress helloBytes
   match Zip.Native.GzipDecode.decompress gzipped with
   | .ok result => assert! result == helloBytes
   | .error e => throw (IO.userError s!"native gzip decompress failed on hello: {e}")
 
-  -- Gzip: FFI compress → native decompress: larger data
-  let gzippedBig ← Gzip.compress big
+  -- Gzip: native compress → native decompress: larger data
+  let gzippedBig := Zip.Native.GzipEncode.compress big
   match Zip.Native.GzipDecode.decompress gzippedBig with
   | .ok result => assert! result == big
   | .error e => throw (IO.userError s!"native gzip decompress failed on big data: {e}")
 
   -- Gzip: various compression levels
-  for level in [0, 1, 6, 9] do
-    let compressed ← Gzip.compress helloBytes level
+  for level in ([0, 1, 6, 9] : List UInt8) do
+    let compressed := Zip.Native.GzipEncode.compress helloBytes level
     match Zip.Native.GzipDecode.decompress compressed with
     | .ok result => assert! result == helloBytes
     | .error e => throw (IO.userError s!"native gzip level {level} failed: {e}")
 
   -- Gzip: empty data
-  let gzippedEmpty ← Gzip.compress ByteArray.empty
+  let gzippedEmpty := Zip.Native.GzipEncode.compress ByteArray.empty
   match Zip.Native.GzipDecode.decompress gzippedEmpty with
   | .ok result => assert! result == ByteArray.empty
   | .error e => throw (IO.userError s!"native gzip decompress (empty) failed: {e}")
 
   -- Gzip: single byte
   let singleByte := ByteArray.mk #[42]
-  let gzippedSingle ← Gzip.compress singleByte
+  let gzippedSingle := Zip.Native.GzipEncode.compress singleByte
   match Zip.Native.GzipDecode.decompress gzippedSingle with
   | .ok result => assert! result == singleByte
   | .error e => throw (IO.userError s!"native gzip decompress (single) failed: {e}")
 
   -- Gzip: large data
   let large ← mkLargeData
-  let gzippedLarge ← Gzip.compress large
+  let gzippedLarge := Zip.Native.GzipEncode.compress large
   match Zip.Native.GzipDecode.decompress gzippedLarge with
   | .ok result => assert! result == large
   | .error e => throw (IO.userError s!"native gzip decompress (large) failed: {e}")
 
   -- Gzip: concatenated streams (compress two pieces, concatenate gzip output)
-  let gz1 ← Gzip.compress helloBytes
-  let gz2 ← Gzip.compress singleByte
+  let gz1 := Zip.Native.GzipEncode.compress helloBytes
+  let gz2 := Zip.Native.GzipEncode.compress singleByte
   let concatenated := gz1 ++ gz2
   match Zip.Native.GzipDecode.decompress concatenated with
   | .ok result => assert! result == (helloBytes ++ singleByte)
   | .error e => throw (IO.userError s!"native gzip decompress (concatenated) failed: {e}")
 
-  -- Zlib: FFI compress → native decompress
-  let zlibbed ← Zlib.compress helloBytes
+  -- Zlib: native compress → native decompress
+  let zlibbed := Zip.Native.ZlibEncode.compress helloBytes
   match Zip.Native.ZlibDecode.decompress zlibbed with
   | .ok result => assert! result == helloBytes
   | .error e => throw (IO.userError s!"native zlib decompress failed on hello: {e}")
 
   -- Zlib: larger data
-  let zlibbedBig ← Zlib.compress big
+  let zlibbedBig := Zip.Native.ZlibEncode.compress big
   match Zip.Native.ZlibDecode.decompress zlibbedBig with
   | .ok result => assert! result == big
   | .error e => throw (IO.userError s!"native zlib decompress failed on big data: {e}")
 
   -- Zlib: various compression levels
-  for level in [1, 6, 9] do
-    let compressed ← Zlib.compress helloBytes level
+  for level in ([1, 6, 9] : List UInt8) do
+    let compressed := Zip.Native.ZlibEncode.compress helloBytes level
     match Zip.Native.ZlibDecode.decompress compressed with
     | .ok result => assert! result == helloBytes
     | .error e => throw (IO.userError s!"native zlib level {level} failed: {e}")
 
   -- Zlib: empty data
-  let zlibbedEmpty ← Zlib.compress ByteArray.empty
+  let zlibbedEmpty := Zip.Native.ZlibEncode.compress ByteArray.empty
   match Zip.Native.ZlibDecode.decompress zlibbedEmpty with
   | .ok result => assert! result == ByteArray.empty
   | .error e => throw (IO.userError s!"native zlib decompress (empty) failed: {e}")
 
   -- Zlib: large data
-  let zlibbedLarge ← Zlib.compress large
+  let zlibbedLarge := Zip.Native.ZlibEncode.compress large
   match Zip.Native.ZlibDecode.decompress zlibbedLarge with
   | .ok result => assert! result == large
   | .error e => throw (IO.userError s!"native zlib decompress (large) failed: {e}")
@@ -100,19 +101,19 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .error e => throw (IO.userError s!"decompressAuto (zlib) failed: {e}")
 
   -- Auto-detect: raw deflate
-  let raw ← RawDeflate.compress helloBytes
+  let raw := Zip.Native.Deflate.deflateRaw helloBytes
   match Zip.Native.decompressAuto raw with
   | .ok result => assert! result == helloBytes
   | .error e => throw (IO.userError s!"decompressAuto (raw) failed: {e}")
 
   -- Incompressible data
   let random := mkRandomData
-  let gzippedRandom ← Gzip.compress random
+  let gzippedRandom := Zip.Native.GzipEncode.compress random
   match Zip.Native.GzipDecode.decompress gzippedRandom with
   | .ok result => assert! result == random
   | .error e => throw (IO.userError s!"native gzip decompress (random) failed: {e}")
 
-  let zlibbedRandom ← Zlib.compress random
+  let zlibbedRandom := Zip.Native.ZlibEncode.compress random
   match Zip.Native.ZlibDecode.decompress zlibbedRandom with
   | .ok result => assert! result == random
   | .error e => throw (IO.userError s!"native zlib decompress (random) failed: {e}")
@@ -142,9 +143,11 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .ok result => assert! result == large
   | .error e => throw (IO.userError s!"native gzip compress/decompress (large L1) failed: {e}")
 
-  -- Cross-implementation: native gzip compress → FFI decompress
+  -- Cross-implementation: native gzip compress → native decompress
   let nativeGz := Zip.Native.GzipEncode.compress helloBytes 1
-  let ffiDecompressed ← Gzip.decompress nativeGz
+  let ffiDecompressed ← match Zip.Native.GzipDecode.decompress nativeGz with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! ffiDecompressed == helloBytes
 
   -- Cross-implementation: FFI gzip compress → native decompress (already tested above)
@@ -164,9 +167,11 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .ok result => assert! result == ByteArray.empty
   | .error e => throw (IO.userError s!"native zlib compress/decompress (empty) failed: {e}")
 
-  -- Cross-implementation: native zlib compress → FFI decompress
+  -- Cross-implementation: native zlib compress → native decompress
   let nativeZlib := Zip.Native.ZlibEncode.compress helloBytes 1
-  let ffiZlibDecompressed ← Zlib.decompress nativeZlib
+  let ffiZlibDecompressed ← match Zip.Native.ZlibDecode.decompress nativeZlib with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! ffiZlibDecompressed == helloBytes
 
   -- compressAuto roundtrip: gzip
@@ -189,9 +194,11 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .ok result => assert! result == helloBytes
   | .error e => throw (IO.userError s!"native gzip compress/decompress L5 failed: {e}")
 
-  -- Native gzip compress level 5 → FFI decompress (cross-implementation)
+  -- Native gzip compress level 5 → native decompress (cross-implementation)
   let nativeGzL5 := Zip.Native.GzipEncode.compress helloBytes 5
-  let ffiDecompL5 ← Gzip.decompress nativeGzL5
+  let ffiDecompL5 ← match Zip.Native.GzipDecode.decompress nativeGzL5 with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! ffiDecompL5 == helloBytes
 
   -- Native gzip level 5: empty data
@@ -209,9 +216,11 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .ok result => assert! result == helloBytes
   | .error e => throw (IO.userError s!"native zlib compress/decompress L5 failed: {e}")
 
-  -- Native zlib compress level 5 → FFI decompress (cross-implementation)
+  -- Native zlib compress level 5 → native decompress (cross-implementation)
   let nativeZlibL5 := Zip.Native.ZlibEncode.compress helloBytes 5
-  let ffiZlibDecompL5 ← Zlib.decompress nativeZlibL5
+  let ffiZlibDecompL5 ← match Zip.Native.ZlibDecode.decompress nativeZlibL5 with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
   assert! ffiZlibDecompL5 == helloBytes
 
   -- compressAuto level 5 roundtrip: gzip
@@ -243,7 +252,7 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .error e => assert! e.contains "magic"
   | .ok _ => throw (IO.userError "gzip: expected error on bad magic")
 
-  let gzippedHello ← Gzip.compress helloBytes
+  let gzippedHello := Zip.Native.GzipEncode.compress helloBytes
   let truncated := gzippedHello.extract 0 (gzippedHello.size - 4)
   match Zip.Native.GzipDecode.decompress truncated with
   | .error _ => pure ()
@@ -269,7 +278,7 @@ def ZipTest.NativeGzip.tests : IO Unit := do
   | .error e => assert! e.contains "compression method"
   | .ok _ => throw (IO.userError "zlib: expected error on wrong method")
 
-  let zlibbedHello ← Zlib.compress helloBytes
+  let zlibbedHello := Zip.Native.ZlibEncode.compress helloBytes
   let mut corruptAdler := zlibbedHello
   let adlerPos := corruptAdler.size - 1
   corruptAdler := corruptAdler.set! adlerPos (corruptAdler[adlerPos]! ^^^ 0xFF)
@@ -294,11 +303,11 @@ def ZipTest.NativeGzip.tests : IO Unit := do
       | .ok result => assert! result == input
       | .error e => throw (IO.userError s!"decompressSingle level {level} failed: {e}")
 
-  -- decompressSingle agrees with decompress on FFI encoder output
-  let ffiGz ← Gzip.compress helloBytes
-  match Zip.Native.GzipDecode.decompressSingle ffiGz with
+  -- decompressSingle agrees with decompress on native encoder output (extra check)
+  let nativeGzCheck := Zip.Native.GzipEncode.compress helloBytes
+  match Zip.Native.GzipDecode.decompressSingle nativeGzCheck with
   | .ok result => assert! result == helloBytes
-  | .error e => throw (IO.userError s!"decompressSingle on FFI gzip failed: {e}")
+  | .error e => throw (IO.userError s!"decompressSingle on native gzip failed: {e}")
 
   -- Zlib decompressSingle agrees with decompress on native encoder output
   for level in ([0, 1, 5] : List UInt8) do
@@ -308,10 +317,10 @@ def ZipTest.NativeGzip.tests : IO Unit := do
       | .ok result => assert! result == input
       | .error e => throw (IO.userError s!"zlib decompressSingle level {level} failed: {e}")
 
-  -- Zlib decompressSingle agrees with decompress on FFI encoder output
-  let ffiZlib ← Zlib.compress helloBytes
-  match Zip.Native.ZlibDecode.decompressSingle ffiZlib with
+  -- Zlib decompressSingle agrees with decompress on native encoder output (extra check)
+  let nativeZlibCheck := Zip.Native.ZlibEncode.compress helloBytes
+  match Zip.Native.ZlibDecode.decompressSingle nativeZlibCheck with
   | .ok result => assert! result == helloBytes
-  | .error e => throw (IO.userError s!"zlib decompressSingle on FFI zlib failed: {e}")
+  | .error e => throw (IO.userError s!"zlib decompressSingle on native zlib failed: {e}")
 
   IO.println "  NativeGzip tests passed."

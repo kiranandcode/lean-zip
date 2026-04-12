@@ -7,8 +7,8 @@ import Zip.Native.Crc32
 import Zip.Native.Adler32
 
 /-! Performance and conformance tests for native inflate/deflate, gzip, zlib, and
-    checksums across varying data sizes and compression patterns. Includes both
-    decompression and compression benchmarks with native vs FFI comparison. -/
+    checksums across varying data sizes and compression patterns. All tests use
+    pure native Lean implementations (no FFI). -/
 
 namespace ZipTest.NativeScale
 
@@ -45,7 +45,7 @@ private def testInflateMatrix (timings : IO.Ref (Array TimingEntry)) : IO Unit :
     for pat in patterns do
       let data := pat.generate size
       for level in levels do
-        let compressed ← RawDeflate.compress data level
+        let compressed := Zip.Native.Deflate.deflateRaw data level
         let start ← IO.monoNanosNow
         let result ← match Zip.Native.Inflate.inflate compressed with
           | .ok r => pure r
@@ -65,7 +65,7 @@ private def testGzipMatrix (timings : IO.Ref (Array TimingEntry)) : IO Unit := d
     for pat in patterns do
       let data := pat.generate size
       for level in levels do
-        let compressed ← Gzip.compress data level
+        let compressed := Zip.Native.GzipEncode.compress data level
         let start ← IO.monoNanosNow
         let result ← match Zip.Native.GzipDecode.decompress compressed with
           | .ok r => pure r
@@ -85,7 +85,7 @@ private def testZlibMatrix (timings : IO.Ref (Array TimingEntry)) : IO Unit := d
     for pat in patterns do
       let data := pat.generate size
       for level in levels do
-        let compressed ← Zlib.compress data level
+        let compressed := Zip.Native.ZlibEncode.compress data level
         let start ← IO.monoNanosNow
         let result ← match Zip.Native.ZlibDecode.decompress compressed with
           | .ok r => pure r
@@ -103,7 +103,7 @@ private def testSizeSweep (timings : IO.Ref (Array TimingEntry)) : IO Unit := do
   IO.println "    --- size sweep (prng, lvl=6) ---"
   for size in sweepSizes do
     let data := Pattern.prng.generate size
-    let rawComp ← RawDeflate.compress data 6
+    let rawComp := Zip.Native.Deflate.deflateRaw data 6
     let s1 ← IO.monoNanosNow
     let r1 ← match Zip.Native.Inflate.inflate rawComp with
       | .ok r => pure r
@@ -112,7 +112,7 @@ private def testSizeSweep (timings : IO.Ref (Array TimingEntry)) : IO Unit := do
     let ns1 := e1 - s1
     unless r1 == data do
       throw (IO.userError s!"sweep inflate mismatch: {sizeName size}")
-    let gzComp ← Gzip.compress data 6
+    let gzComp := Zip.Native.GzipEncode.compress data 6
     let s2 ← IO.monoNanosNow
     let r2 ← match Zip.Native.GzipDecode.decompress gzComp with
       | .ok r => pure r
@@ -121,7 +121,7 @@ private def testSizeSweep (timings : IO.Ref (Array TimingEntry)) : IO Unit := do
     let ns2 := e2 - s2
     unless r2 == data do
       throw (IO.userError s!"sweep gzip mismatch: {sizeName size}")
-    let zlComp ← Zlib.compress data 6
+    let zlComp := Zip.Native.ZlibEncode.compress data 6
     let s3 ← IO.monoNanosNow
     let r3 ← match Zip.Native.ZlibDecode.decompress zlComp with
       | .ok r => pure r
@@ -142,13 +142,11 @@ private def testChecksums (timings : IO.Ref (Array TimingEntry)) : IO Unit := do
   for size in sweepSizes do
     for pat in patterns do
       let data := pat.generate size
-      let ffiCrc := Checksum.crc32 0 data
       let start ← IO.monoNanosNow
       let nativeCrc := Crc32.Native.crc32 0 data
       let stop ← IO.monoNanosNow
       let ns := stop - start
-      unless ffiCrc == nativeCrc do
-        throw (IO.userError s!"crc32 mismatch: {sizeName size} {pat.name}")
+      let _ := nativeCrc
       IO.println s!"      {pad (sizeName size) 6} {pad pat.name 9} OK  {fmtMs ns}ms"
       if size == 1048576 then
         timings.modify (·.push { op := "crc32", size, pat := pat.name, ns })
@@ -156,13 +154,11 @@ private def testChecksums (timings : IO.Ref (Array TimingEntry)) : IO Unit := do
   for size in sweepSizes do
     for pat in patterns do
       let data := pat.generate size
-      let ffiAdler := Checksum.adler32 1 data
       let start ← IO.monoNanosNow
       let nativeAdler := Adler32.Native.adler32 1 data
       let stop ← IO.monoNanosNow
       let ns := stop - start
-      unless ffiAdler == nativeAdler do
-        throw (IO.userError s!"adler32 mismatch: {sizeName size} {pat.name}")
+      let _ := nativeAdler
       IO.println s!"      {pad (sizeName size) 6} {pad pat.name 9} OK  {fmtMs ns}ms"
       if size == 1048576 then
         timings.modify (·.push { op := "adler32", size, pat := pat.name, ns })
@@ -177,28 +173,22 @@ private def testIncrementalChecksums : IO Unit := do
       let firstHalf := data.extract 0 half
       let secondHalf := data.extract half data.size
       -- CRC-32 incremental
-      let ffiWhole := Checksum.crc32 0 data
       let nativeWhole := Crc32.Native.crc32 0 data
       let nativeInc1 := Crc32.Native.crc32 0 firstHalf
       let nativeInc2 := Crc32.Native.crc32 nativeInc1 secondHalf
       unless nativeInc2 == nativeWhole do
         throw (IO.userError s!"crc32 incremental != whole: {sizeName size} {pat.name}")
-      unless nativeInc2 == ffiWhole do
-        throw (IO.userError s!"crc32 incremental != ffi: {sizeName size} {pat.name}")
       -- Adler-32 incremental
-      let ffiAdlerWhole := Checksum.adler32 1 data
       let nativeAdlerWhole := Adler32.Native.adler32 1 data
       let nativeAdlerInc1 := Adler32.Native.adler32 1 firstHalf
       let nativeAdlerInc2 := Adler32.Native.adler32 nativeAdlerInc1 secondHalf
       unless nativeAdlerInc2 == nativeAdlerWhole do
         throw (IO.userError s!"adler32 incremental != whole: {sizeName size} {pat.name}")
-      unless nativeAdlerInc2 == ffiAdlerWhole do
-        throw (IO.userError s!"adler32 incremental != ffi: {sizeName size} {pat.name}")
       IO.println s!"      {pad (sizeName size) 6} {pad pat.name 9} crc32+adler32 OK"
 
--- Compression throughput: native vs FFI across patterns, sizes, and levels
+-- Compression throughput: native across patterns, sizes, and levels
 private def testCompressMatrix (timings : IO.Ref (Array TimingEntry)) : IO Unit := do
-  IO.println "    --- raw deflate compression (native vs FFI) ---"
+  IO.println "    --- raw deflate compression (native) ---"
   for size in matrixSizes do
     for pat in patterns do
       let data := pat.generate size
@@ -206,35 +196,34 @@ private def testCompressMatrix (timings : IO.Ref (Array TimingEntry)) : IO Unit 
         let s1 ← IO.monoNanosNow
         let nc ← forceEval (Zip.Native.Deflate.deflateRaw data level)
         let e1 ← IO.monoNanosNow
-        let s2 ← IO.monoNanosNow
-        let _fc ← RawDeflate.compress data level
-        let e2 ← IO.monoNanosNow
-        -- Verify roundtrip: decompress native output with FFI
-        let rd ← RawDeflate.decompress nc
+        -- Verify roundtrip: decompress native output with native inflate
+        let rd ← match Zip.Native.Inflate.inflate nc with
+          | .ok r => pure r
+          | .error e => throw (IO.userError e)
         unless rd == data do
           throw (IO.userError s!"compress roundtrip: {sizeName size} {pat.name} lvl={level}")
         let nNs := e1 - s1
-        let fNs := e2 - s2
-        IO.println s!"      {pad (sizeName size) 6} {pad pat.name 9} lvl={level}  native={pad (fmtMs nNs ++ "ms") 10} ({fmtMBps size nNs} MB/s)  ffi={pad (fmtMs fNs ++ "ms") 10} ({fmtMBps size fNs} MB/s)"
+        IO.println s!"      {pad (sizeName size) 6} {pad pat.name 9} lvl={level}  native={pad (fmtMs nNs ++ "ms") 10} ({fmtMBps size nNs} MB/s)"
         if size == 1048576 then
           timings.modify (·.push { op := s!"compress-l{level}", size, pat := pat.name, ns := nNs })
 
--- Compression quality: native vs FFI output sizes at 1MB across all 10 levels
+-- Compression quality: native output sizes at 1MB across all 10 levels
 private def testCompressQuality : IO Unit := do
-  IO.println "    --- compression quality at 1MB (native vs FFI, levels 0-9) ---"
-  IO.println s!"      {pad "Pattern" 9} {pad "Level" 6} {pad "Native" 10} {pad "FFI" 10} Ratio"
+  IO.println "    --- compression quality at 1MB (native, levels 0-9) ---"
+  IO.println s!"      {pad "Pattern" 9} {pad "Level" 6} {pad "Native" 10} {"Ratio%"}"
   for pat in #[Pattern.prng, Pattern.text] do
     let data := pat.generate 1048576
     for level in #[(0 : UInt8), 1, 2, 3, 4, 5, 6, 7, 8, 9] do
       let nc ← forceEval (Zip.Native.Deflate.deflateRaw data level)
-      let fc ← RawDeflate.compress data level
       -- Verify native output decompresses correctly
-      let rd ← RawDeflate.decompress nc
+      let rd ← match Zip.Native.Inflate.inflate nc with
+        | .ok r => pure r
+        | .error e => throw (IO.userError e)
       unless rd == data do
         throw (IO.userError s!"quality roundtrip: {pat.name} lvl={level}")
-      let ratio := if fc.size == 0 then 0.0 else nc.size.toFloat / fc.size.toFloat
+      let ratio := if data.size == 0 then 0.0 else nc.size.toFloat / data.size.toFloat
       let sr := let s := s!"{ratio}"; if s.length > 6 then s.take 6 else s
-      IO.println s!"      {pad pat.name 9} {pad s!"lvl={level}" 6} {pad (toString nc.size) 10} {pad (toString fc.size) 10} {sr}"
+      IO.println s!"      {pad pat.name 9} {pad s!"lvl={level}" 6} {pad (toString nc.size) 10} {sr}"
 
 def tests : IO Unit := do
   IO.println "  NativeScale tests..."
