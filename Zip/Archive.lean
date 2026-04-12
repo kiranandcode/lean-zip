@@ -163,8 +163,8 @@ def create (outputPath : System.FilePath)
     let mut offset : UInt64 := 0
     for (archiveName, diskPath) in files do
       let fileData ← IO.FS.readBinFile diskPath
-      let crc := Checksum.crc32 0 fileData
-      let deflated ← RawDeflate.compress fileData
+      let crc := Crc32.Native.crc32 0 fileData
+      let deflated ← Zip.Native.Deflate.deflateRaw fileData
       let useDeflate := deflated.size < fileData.size
       let method : UInt16 := if useDeflate then 8 else 0
       let compData := if useDeflate then deflated else fileData
