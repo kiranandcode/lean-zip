@@ -65,6 +65,50 @@ def cmdList (args : List String) : IO Unit := do
   | _ =>
     throw (IO.userError "list: expected <archive.zip>")
 
+def cmdGunzip (args : List String) : IO Unit := do
+  match args with
+  | [input] =>
+    let data ← IO.FS.readBinFile input
+    match Zip.Native.GzipDecode.decompress data with
+    | .ok result => IO.FS.writeBinFile (input ++ ".out") result
+                    IO.println s!"decompressed {data.size} → {result.size} bytes"
+    | .error e => throw (IO.userError s!"gzip error: {e}")
+  | _ => throw (IO.userError "gunzip: expected <file.gz>")
+
+def cmdInflate (args : List String) : IO Unit := do
+  match args with
+  | [input] =>
+    let data ← IO.FS.readBinFile input
+    match Zip.Native.Inflate.inflate data with
+    | .ok result => IO.FS.writeBinFile (input ++ ".out") result
+                    IO.println s!"inflated {data.size} → {result.size} bytes"
+    | .error e => throw (IO.userError s!"inflate error: {e}")
+  | _ => throw (IO.userError "inflate: expected <file>")
+
+def cmdUntargz (args : List String) : IO Unit := do
+  match args with
+  | [input] =>
+    Tar.extractTarGzNative input "."
+    IO.println "done"
+  | [input, "-d", dir] =>
+    Tar.extractTarGzNative input dir
+    IO.println "done"
+  | _ => throw (IO.userError "untar-gz: expected <file.tar.gz> [-d <outdir>]")
+
+def cmdUntar (args : List String) : IO Unit := do
+  match args with
+  | [input] =>
+    IO.FS.withFile input .read fun h => do
+      let stream := IO.FS.Stream.ofHandle h
+      Tar.extract stream "."
+    IO.println "done"
+  | [input, "-d", dir] =>
+    IO.FS.withFile input .read fun h => do
+      let stream := IO.FS.Stream.ofHandle h
+      Tar.extract stream dir
+    IO.println "done"
+  | _ => throw (IO.userError "untar: expected <file.tar> [-d <outdir>]")
+
 def cmdExtract (args : List String) : IO Unit := do
   let (archive, outDir) ← match args with
     | [archive] => pure (archive, ("." : System.FilePath))
@@ -80,4 +124,8 @@ def main (args : List String) : IO Unit := do
   | "create" :: rest => cmdCreate rest
   | "list" :: rest => cmdList rest
   | "extract" :: rest => cmdExtract rest
+  | "gunzip" :: rest => cmdGunzip rest
+  | "inflate" :: rest => cmdInflate rest
+  | "untar" :: rest => cmdUntar rest
+  | "untar-gz" :: rest => cmdUntargz rest
   | _ => printUsage; if args.isEmpty then pure () else throw (IO.userError "unknown command")
